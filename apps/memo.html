@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>memo.com - 画面共有中でも安心なメモアプリ</title>
+    <style>
+        /* リセットとベーススタイル */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+            background-color: #f5f5f5;
+            color: #333;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ヘッダー */
+        header {
+            background-color: white;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .status {
+            font-size: 0.875rem;
+            color: #666;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            background-color: #f0f0f0;
+        }
+
+        .status.saving {
+            color: #ff9800;
+            background-color: #fff3e0;
+        }
+
+        .status.saved {
+            color: #4caf50;
+            background-color: #e8f5e9;
+        }
+
+        .clear-btn {
+            padding: 0.5rem 1rem;
+            background-color: #fff;
+            color: #666;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+
+        .clear-btn:hover {
+            background-color: #f5f5f5;
+            border-color: #bbb;
+        }
+
+        .clear-btn:active {
+            transform: scale(0.98);
+        }
+
+        /* メインコンテンツ */
+        main {
+            flex: 1;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .memo-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            max-width: 1000px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        #memo-textarea {
+            flex: 1;
+            width: 100%;
+            padding: 1.5rem;
+            font-size: 16px;
+            line-height: 1.6;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background-color: white;
+            resize: none;
+            outline: none;
+            transition: border-color 0.2s;
+            font-family: inherit;
+        }
+
+        #memo-textarea:focus {
+            border-color: #999;
+        }
+
+        #memo-textarea::placeholder {
+            color: #999;
+        }
+
+        /* フッター */
+        footer {
+            background-color: white;
+            padding: 1rem 2rem;
+            border-top: 1px solid #e0e0e0;
+            text-align: center;
+            font-size: 0.875rem;
+            color: #666;
+        }
+
+        /* レスポンシブ対応 */
+        @media (max-width: 768px) {
+            header {
+                padding: 1rem;
+            }
+
+            main {
+                padding: 1rem;
+            }
+
+            footer {
+                padding: 1rem;
+            }
+
+            .logo {
+                font-size: 1.25rem;
+            }
+
+            #memo-textarea {
+                padding: 1rem;
+                font-size: 16px; /* iOS のズームを防ぐため16px以上 */
+            }
+        }
+
+        /* プライベートモード警告 */
+        .warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            font-size: 0.875rem;
+            display: none;
+        }
+
+        .warning.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <!-- ヘッダー -->
+    <header>
+        <div class="logo">📝 memo.com</div>
+        <div class="header-right">
+            <span class="status saved" id="status">保存済み</span>
+            <button class="clear-btn" id="clear-btn">クリア</button>
+        </div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main>
+        <!-- プライベートモード警告 -->
+        <div class="warning" id="private-warning">
+            ⚠️ プライベート/シークレットモードでは、ブラウザを閉じるとメモが削除される可能性があります。
+        </div>
+
+        <div class="memo-container">
+            <textarea
+                id="memo-textarea"
+                placeholder="ここにメモを入力してください...
+
+💡 このメモはブラウザに自動保存されます
+💡 プライベートモードでは保存されません
+💡 画面共有中でも安心して使えます"
+                autofocus
+            ></textarea>
+        </div>
+    </main>
+
+    <!-- フッター -->
+    <footer>
+        🔒 あなたのメモはこのブラウザにのみ保存されます。サーバーには送信されません。
+    </footer>
+
+    <script>
+        // 定数
+        const STORAGE_KEY = 'memo_content';
+        const AUTOSAVE_DELAY = 500; // ミリ秒
+
+        // DOM要素
+        const textarea = document.getElementById('memo-textarea');
+        const statusElement = document.getElementById('status');
+        const clearBtn = document.getElementById('clear-btn');
+        const privateWarning = document.getElementById('private-warning');
+
+        // 保存タイマー
+        let saveTimer = null;
+
+        /**
+         * ステータス表示を更新
+         */
+        function updateStatus(status) {
+            statusElement.className = 'status';
+
+            switch(status) {
+                case 'saving':
+                    statusElement.textContent = '保存中...';
+                    statusElement.classList.add('saving');
+                    break;
+                case 'saved':
+                    statusElement.textContent = '保存済み';
+                    statusElement.classList.add('saved');
+                    break;
+            }
+        }
+
+        /**
+         * メモをlocalStorageに保存
+         */
+        function saveMemo(content) {
+            try {
+                localStorage.setItem(STORAGE_KEY, content);
+                updateStatus('saved');
+            } catch (error) {
+                console.error('保存に失敗しました:', error);
+                statusElement.textContent = '保存失敗';
+                statusElement.className = 'status';
+            }
+        }
+
+        /**
+         * メモを読み込み
+         */
+        function loadMemo() {
+            try {
+                const savedMemo = localStorage.getItem(STORAGE_KEY);
+                if (savedMemo !== null) {
+                    textarea.value = savedMemo;
+                }
+            } catch (error) {
+                console.error('読み込みに失敗しました:', error);
+            }
+        }
+
+        /**
+         * メモをクリア
+         */
+        function clearMemo() {
+            if (textarea.value.trim() === '') {
+                return;
+            }
+
+            if (confirm('メモの内容をすべて削除しますか?')) {
+                textarea.value = '';
+                try {
+                    localStorage.removeItem(STORAGE_KEY);
+                    updateStatus('saved');
+                    textarea.focus();
+                } catch (error) {
+                    console.error('クリアに失敗しました:', error);
+                }
+            }
+        }
+
+        /**
+         * プライベートモードを検出
+         */
+        function detectPrivateMode() {
+            try {
+                // localStorageが使えるかテスト
+                localStorage.setItem('__test__', 'test');
+                localStorage.removeItem('__test__');
+
+                // Safari のプライベートモード検出
+                if (localStorage.length === 0) {
+                    // 別の方法で確認
+                    try {
+                        window.openDatabase(null, null, null, null);
+                    } catch (e) {
+                        privateWarning.classList.add('show');
+                    }
+                }
+            } catch (error) {
+                // localStorageが使えない = プライベートモード
+                privateWarning.classList.add('show');
+            }
+        }
+
+        /**
+         * デバウンス付き自動保存
+         */
+        function handleInput() {
+            updateStatus('saving');
+
+            // 既存のタイマーをクリア
+            if (saveTimer) {
+                clearTimeout(saveTimer);
+            }
+
+            // 新しいタイマーをセット
+            saveTimer = setTimeout(() => {
+                saveMemo(textarea.value);
+            }, AUTOSAVE_DELAY);
+        }
+
+        /**
+         * キーボードショートカット
+         */
+        function handleKeydown(event) {
+            // Cmd/Ctrl + S で手動保存
+            if ((event.metaKey || event.ctrlKey) && event.key === 's') {
+                event.preventDefault();
+
+                if (saveTimer) {
+                    clearTimeout(saveTimer);
+                }
+
+                saveMemo(textarea.value);
+            }
+        }
+
+        /**
+         * ページを離れる前に保存
+         */
+        function handleBeforeUnload() {
+            if (saveTimer) {
+                clearTimeout(saveTimer);
+            }
+            saveMemo(textarea.value);
+        }
+
+        // イベントリスナーの設定
+        textarea.addEventListener('input', handleInput);
+        textarea.addEventListener('keydown', handleKeydown);
+        clearBtn.addEventListener('click', clearMemo);
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        // 初期化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadMemo();
+            detectPrivateMode();
+        });
+
+        // ページ読み込み時にもメモを読み込む
+        loadMemo();
+        detectPrivateMode();
+    </script>
+</body>
+</html>
